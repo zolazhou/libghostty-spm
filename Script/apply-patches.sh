@@ -30,18 +30,24 @@ fi
 apply_unified_patch() {
     local patch_file="$1"
 
-    if [ -d "$SOURCE_DIR/.git" ] && command -v git >/dev/null 2>&1; then
-        if git -C "$SOURCE_DIR" apply --check --reverse "$patch_file" >/dev/null 2>&1; then
+    if command -v git >/dev/null 2>&1; then
+        if git -C "$SOURCE_DIR" apply --check --binary "$patch_file" >/dev/null 2>&1; then
+            git -C "$SOURCE_DIR" apply --binary "$patch_file"
+            echo "[+] applied patch: $(basename "$patch_file")"
+            return
+        fi
+
+        if git -C "$SOURCE_DIR" apply --check --reverse --binary "$patch_file" >/dev/null 2>&1; then
             echo "[+] patch already applied: $(basename "$patch_file")"
             return
         fi
 
-        if ! git -C "$SOURCE_DIR" apply --check "$patch_file" >/dev/null 2>&1; then
-            echo "[-] failed to validate patch: $patch_file"
-            exit 1
-        fi
+        echo "[-] failed to validate patch: $patch_file"
+        exit 1
+    fi
 
-        git -C "$SOURCE_DIR" apply "$patch_file"
+    if patch -p1 --dry-run -d "$SOURCE_DIR" <"$patch_file" >/dev/null 2>&1; then
+        patch -p1 -d "$SOURCE_DIR" <"$patch_file" >/dev/null
         echo "[+] applied patch: $(basename "$patch_file")"
         return
     fi
@@ -51,13 +57,8 @@ apply_unified_patch() {
         return
     fi
 
-    if ! patch -p1 --dry-run -d "$SOURCE_DIR" <"$patch_file" >/dev/null 2>&1; then
-        echo "[-] failed to validate patch: $patch_file"
-        exit 1
-    fi
-
-    patch -p1 -d "$SOURCE_DIR" <"$patch_file" >/dev/null
-    echo "[+] applied patch: $(basename "$patch_file")"
+    echo "[-] failed to validate patch: $patch_file"
+    exit 1
 }
 
 for patch_file in "$PATCH_DIR"/*; do

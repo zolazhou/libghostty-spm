@@ -39,6 +39,10 @@
             core.setDisplayVisible(visible)
         }
 
+        open var foregroundProcessID: pid_t? {
+            surface?.foregroundProcessID
+        }
+
         var surface: TerminalSurface? {
             core.surface
         }

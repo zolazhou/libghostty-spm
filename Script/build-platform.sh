@@ -23,6 +23,11 @@ if [ ! -d "$SOURCE_DIR" ]; then
     exit 1
 fi
 
+if [ "${LIBGHOSTTY_SPM_SKIP_PATCHES:-0}" != "1" ]; then
+    ./Script/apply-patches.sh "$SOURCE_DIR"
+    export LIBGHOSTTY_SPM_SKIP_PATCHES=1
+fi
+
 build_variant() {
     local variant_name="$1"
     shift

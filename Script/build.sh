@@ -101,6 +101,8 @@ echo "[*] zig version: $(zig version)"
 echo "[*] ghostty source: $SOURCE_DIR"
 echo "[*] platform groups: $PLATFORMS"
 
+./Script/apply-patches.sh "$SOURCE_DIR"
+
 OLD_IFS=$IFS
 IFS=','
 set -- $PLATFORMS
@@ -109,7 +111,8 @@ IFS=$OLD_IFS
 for platform_group in "$@"; do
     platform_group=$(echo "$platform_group" | xargs)
     [ -n "$platform_group" ] || continue
-    ./Script/build-platform.sh "$SOURCE_DIR" "$platform_group" "$ARTIFACTS_DIR"
+    env LIBGHOSTTY_SPM_SKIP_PATCHES=1 \
+        ./Script/build-platform.sh "$SOURCE_DIR" "$platform_group" "$ARTIFACTS_DIR"
 done
 
 ./Script/merge-xcframework.sh \

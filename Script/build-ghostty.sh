@@ -15,6 +15,7 @@ ZIG_TARGET=${2:-}
 OUTPUT_DIR=${3:-}
 ZIG_CPU=${ZIG_CPU:-}
 ZIG_BUILD_EXTRA_ARGS=${ZIG_BUILD_EXTRA_ARGS:-}
+LIBGHOSTTY_SPM_SKIP_PATCHES=${LIBGHOSTTY_SPM_SKIP_PATCHES:-0}
 
 if [ -z "$SOURCE_DIR" ] || [ -z "$ZIG_TARGET" ] || [ -z "$OUTPUT_DIR" ]; then
     echo "Usage: $0 <source_dir> <zig_target> <output_dir>"
@@ -36,7 +37,9 @@ if ! command -v zig >/dev/null 2>&1; then
     exit 1
 fi
 
-./Script/apply-patches.sh "$SOURCE_DIR"
+if [ "$LIBGHOSTTY_SPM_SKIP_PATCHES" != "1" ]; then
+    ./Script/apply-patches.sh "$SOURCE_DIR"
+fi
 
 CACHE_ROOT="${BUILD_CACHE_ROOT:-$ROOT_DIR/build/cache}"
 GLOBAL_CACHE_DIR="${ZIG_GLOBAL_CACHE_DIR:-$CACHE_ROOT/zig-global}"
@@ -98,16 +101,16 @@ find_built_library() {
 
 LIBRARY_PATH=
 
-if [ -f "$SOURCE_DIR/zig-out/lib/libghostty.a" ]; then
-    LIBRARY_PATH="$SOURCE_DIR/zig-out/lib/libghostty.a"
-fi
-
 if [ -z "$LIBRARY_PATH" ]; then
     LIBRARY_PATH=$(find_built_library "libghostty-fat.a")
 fi
 
 if [ -z "$LIBRARY_PATH" ]; then
     LIBRARY_PATH=$(find_built_library "libghostty.a")
+fi
+
+if [ -z "$LIBRARY_PATH" ] && [ -f "$SOURCE_DIR/zig-out/lib/libghostty.a" ]; then
+    LIBRARY_PATH="$SOURCE_DIR/zig-out/lib/libghostty.a"
 fi
 
 if [ -z "$LIBRARY_PATH" ]; then
@@ -120,7 +123,41 @@ if [ -z "$LIBRARY_PATH" ]; then
     exit 1
 fi
 
-cp "$LIBRARY_PATH" "$OUTPUT_DIR/lib/libghostty.a"
+REPACK_DIR="$OUTPUT_DIR/repack"
+rm -rf "$REPACK_DIR"
+mkdir -p "$REPACK_DIR/archives"
+
+ARCHIVE_COUNT=0
+while IFS= read -r archive_path; do
+    [ -n "$archive_path" ] || continue
+    ARCHIVE_COUNT=$((ARCHIVE_COUNT + 1))
+    archive_extract_dir="$REPACK_DIR/archives/$ARCHIVE_COUNT"
+    mkdir -p "$archive_extract_dir"
+    (
+        cd "$archive_extract_dir"
+        /usr/bin/ar -x "$archive_path"
+        chmod u+rw ./*.o 2>/dev/null || true
+    )
+done < <(find "$LOCAL_CACHE_DIR/o" -type f -name "*.a" -print | sort)
+
+if [ "$ARCHIVE_COUNT" -eq 0 ]; then
+    echo "[!] failed to locate archives to repack in $LOCAL_CACHE_DIR"
+    exit 1
+fi
+
+OBJECT_FILES=()
+while IFS= read -r object_path; do
+    [ -n "$object_path" ] || continue
+    OBJECT_FILES+=("$object_path")
+done < <(find "$REPACK_DIR/archives" -type f -name "*.o" -print | sort)
+
+if [ "${#OBJECT_FILES[@]}" -eq 0 ]; then
+    echo "[!] failed to locate object files to repack in $REPACK_DIR"
+    exit 1
+fi
+
+libtool -static -o "$OUTPUT_DIR/lib/libghostty.a" "${OBJECT_FILES[@]}"
+rm -rf "$REPACK_DIR"
 cp "$SOURCE_DIR/include/ghostty.h" "$OUTPUT_DIR/include/ghostty.h"
 cat >"$OUTPUT_DIR/include/module.modulemap" <<'EOF'
 module libghostty {
@@ -130,3 +167,4 @@ module libghostty {
 EOF
 
 echo "[*] built archive: $LIBRARY_PATH"
+echo "[*] repacked archives: $ARCHIVE_COUNT"

@@ -196,6 +196,23 @@ public final class TerminalSurface {
         return metrics
     }
 
+    public var foregroundProcessID: pid_t? {
+        guard let s = surface else {
+            return nil
+        }
+
+        #if canImport(Darwin)
+            let processID = ghostty_surface_foreground_pid(s)
+        #else
+            return nil
+        #endif
+
+        guard processID > 0, processID <= UInt64(pid_t.max) else {
+            return nil
+        }
+        return pid_t(processID)
+    }
+
     // MARK: - Selection
 
     struct SelectionResult {

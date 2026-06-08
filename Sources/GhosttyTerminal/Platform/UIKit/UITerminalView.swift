@@ -74,6 +74,10 @@
             set { core.configuration = newValue }
         }
 
+        open var foregroundProcessID: pid_t? {
+            surface?.foregroundProcessID
+        }
+
         var surface: TerminalSurface? {
             core.surface
         }
